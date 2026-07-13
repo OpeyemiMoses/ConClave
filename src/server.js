@@ -20,6 +20,7 @@ const NETWORK = process.env.X402_NETWORK || "eip155:1952"; // eip155:196 = mainn
 const PAY_TO = process.env.PAY_TO_ADDRESS;
 
 let resourceServer = null;
+let mcpPaymentGate = null;
 if (process.env.OKX_API_KEY && PAY_TO) {
   const facilitatorClient = new OKXFacilitatorClient({
     apiKey: process.env.OKX_API_KEY,
@@ -32,11 +33,6 @@ if (process.env.OKX_API_KEY && PAY_TO) {
   app.use(
     paymentMiddleware(
       {
-        "POST /mcp": {
-          accepts: [{ scheme: "exact", network: NETWORK, payTo: PAY_TO, price: "$0.05" }],
-          description: "ConClave MCP endpoint (analyze_repo / reanalyze_repo)",
-          mimeType: "application/json",
-        },
         "POST /analyze_repo": {
           accepts: [{ scheme: "exact", network: NETWORK, payTo: PAY_TO, price: "$0.05" }],
           description: "ConClave: multi-agent repo analysis (first run)",
@@ -50,6 +46,23 @@ if (process.env.OKX_API_KEY && PAY_TO) {
       },
       resourceServer
     )
+  );
+
+  // /mcp needs its own gate, applied conditionally — paymentMiddleware only
+  // understands HTTP method+path, but a single POST /mcp route carries many
+  // different JSON-RPC methods (initialize, tools/list, tools/call, ...).
+  // Charging for all of them would charge for tool DISCOVERY, which breaks
+  // every MCP client (including OKX's own registration flow) — they need to
+  // call tools/list for free before ever deciding to pay for a tools/call.
+  mcpPaymentGate = paymentMiddleware(
+    {
+      "POST /mcp": {
+        accepts: [{ scheme: "exact", network: NETWORK, payTo: PAY_TO, price: "$0.05" }],
+        description: "ConClave MCP endpoint (analyze_repo / reanalyze_repo)",
+        mimeType: "application/json",
+      },
+    },
+    resourceServer
   );
 } else {
   console.warn(
@@ -100,7 +113,13 @@ app.post("/reanalyze_repo", async (req, res) => {
 // state is kept between calls, which fits per-call billing (each request is
 // fully independent, nothing to resume). A fresh server+transport pair per
 // request avoids request-id collisions across concurrent callers.
-app.post("/mcp", async (req, res) => {
+app.post("/mcp", async (req, res, next) => {
+  const isToolCall = req.body?.method === "tools/call";
+  if (isToolCall && mcpPaymentGate) {
+    return mcpPaymentGate(req, res, next);
+  }
+  next();
+}, async (req, res) => {
   try {
     const mcpServer = createMcpServer();
     const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
