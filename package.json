@@ -1,0 +1,27 @@
+{
+  "name": "conclave",
+  "version": "0.1.0",
+  "description": "Multi-agent repo analysis ASP \u2014 OKX AI Genesis Hackathon",
+  "type": "module",
+  "main": "src/server.js",
+  "scripts": {
+    "test:pipeline": "node src/index.js",
+    "start": "node src/server.js",
+    "mcp:stdio": "node src/mcp-stdio.js",
+    "test:payment": "node scripts/test-payment.js"
+  },
+  "dependencies": {
+    "@google/genai": "^2.11.0",
+    "@modelcontextprotocol/sdk": "^1.12.0",
+    "@okxweb3/x402-core": "^0.1.0",
+    "@okxweb3/x402-evm": "^0.2.1",
+    "@okxweb3/x402-express": "^0.1.1",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@okxweb3/x402-fetch": "^0.1.0",
+    "viem": "^2.21.0"
+  }
+}

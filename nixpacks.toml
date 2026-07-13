@@ -1,0 +1,9 @@
+# Railway's default Node build doesn't guarantee `git` is present at
+# runtime — but ingest.js shells out to `git clone` for every analysis.
+# Without this, the app builds and boots fine, then every /analyze_repo
+# call fails with a confusing "command not found" the first time someone
+# actually uses it. Pin it explicitly instead of hoping it's there.
+providers = ["node"]
+
+[phases.setup]
+nixPkgs = ["nodejs_20", "git"]
