@@ -18,6 +18,10 @@ app.use(express.json());
 // when you switch.
 const NETWORK = process.env.X402_NETWORK || "eip155:1952"; // eip155:196 = mainnet
 const PAY_TO = process.env.PAY_TO_ADDRESS;
+// One price for every call — analyze_repo, reanalyze_repo, and /mcp all
+// charge the same, matching OKX's one-price-per-call A2MCP registration
+// model (it doesn't support per-tool pricing on a single listing anyway).
+const PRICE = process.env.X402_PRICE_MCP_CALL || "$0.50";
 
 let resourceServer = null;
 let mcpPaymentGate = null;
@@ -34,12 +38,12 @@ if (process.env.OKX_API_KEY && PAY_TO) {
     paymentMiddleware(
       {
         "POST /analyze_repo": {
-          accepts: [{ scheme: "exact", network: NETWORK, payTo: PAY_TO, price: "$0.05" }],
+          accepts: [{ scheme: "exact", network: NETWORK, payTo: PAY_TO, price: PRICE }],
           description: "ConClave: multi-agent repo analysis (first run)",
           mimeType: "application/json",
         },
         "POST /reanalyze_repo": {
-          accepts: [{ scheme: "exact", network: NETWORK, payTo: PAY_TO, price: "$0.02" }],
+          accepts: [{ scheme: "exact", network: NETWORK, payTo: PAY_TO, price: PRICE }],
           description: "ConClave: diff-aware repo re-analysis",
           mimeType: "application/json",
         },
@@ -57,7 +61,7 @@ if (process.env.OKX_API_KEY && PAY_TO) {
   mcpPaymentGate = paymentMiddleware(
     {
       "POST /mcp": {
-        accepts: [{ scheme: "exact", network: NETWORK, payTo: PAY_TO, price: "$0.05" }],
+        accepts: [{ scheme: "exact", network: NETWORK, payTo: PAY_TO, price: PRICE }],
         description: "ConClave MCP endpoint (analyze_repo / reanalyze_repo)",
         mimeType: "application/json",
       },
