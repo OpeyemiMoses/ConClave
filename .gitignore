@@ -1,3 +1,4 @@
 node_modules/
 .env
 data/memory.json
+last-report.md

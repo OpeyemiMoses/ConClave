@@ -1,4 +1,5 @@
 import "dotenv/config";
+import { writeFile } from "node:fs/promises";
 import { privateKeyToAccount } from "viem/accounts";
 import { x402Client } from "@okxweb3/x402-core/client";
 import { registerExactEvmScheme } from "@okxweb3/x402-evm/exact/client";
@@ -48,8 +49,11 @@ async function main() {
   }
 
   const text = await res.text();
-  console.log("\n--- Response body ---\n");
-  console.log(text.slice(0, 2000));
+  const outPath = new URL("../last-report.md", import.meta.url);
+  await writeFile(outPath, text);
+  console.log(`\nFull response (${text.length} chars) written to: ${outPath.pathname}`);
+  console.log("\n--- Preview (first 500 chars) ---\n");
+  console.log(text.slice(0, 500) + (text.length > 500 ? "\n...(see file for the rest)" : ""));
 }
 
 main().catch((err) => {
