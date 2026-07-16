@@ -10,6 +10,10 @@ import { toMarkdown } from "./report.js";
 import { createMcpServer } from "./mcp.js";
 
 const app = express();
+// Trust proxy is required to reconstruct the correct https:// protocol
+// in the x402 payment challenges when running behind edge proxies (like Railway)
+app.set("trust proxy", true);
+
 app.use(express.json());
 
 // Defaults to X Layer TESTNET per OKX docs — flip to mainnet once you've
@@ -38,12 +42,12 @@ if (process.env.OKX_API_KEY && PAY_TO) {
     paymentMiddleware(
       {
         "POST /analyze_repo": {
-          accepts: [{ scheme: "exact", network: NETWORK, payTo: PAY_TO, price: PRICE }],
+          accepts: [{ scheme: "exact", network: NETWORK, payTo: PAY_TO, price: PRICE, extra: { decimals: 6 } }],
           description: "ConClave: multi-agent repo analysis (first run)",
           mimeType: "application/json",
         },
         "POST /reanalyze_repo": {
-          accepts: [{ scheme: "exact", network: NETWORK, payTo: PAY_TO, price: PRICE }],
+          accepts: [{ scheme: "exact", network: NETWORK, payTo: PAY_TO, price: PRICE, extra: { decimals: 6 } }],
           description: "ConClave: diff-aware repo re-analysis",
           mimeType: "application/json",
         },
@@ -61,7 +65,7 @@ if (process.env.OKX_API_KEY && PAY_TO) {
   mcpPaymentGate = paymentMiddleware(
     {
       "POST /mcp": {
-        accepts: [{ scheme: "exact", network: NETWORK, payTo: PAY_TO, price: PRICE }],
+        accepts: [{ scheme: "exact", network: NETWORK, payTo: PAY_TO, price: PRICE, extra: { decimals: 6 } }],
         description: "ConClave MCP endpoint (analyze_repo / reanalyze_repo)",
         mimeType: "application/json",
       },
