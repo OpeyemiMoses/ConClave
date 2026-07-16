@@ -16,6 +16,15 @@ app.set("trust proxy", true);
 
 app.use(express.json());
 
+// Force Accept header for /mcp requests so MCP transport handles them
+// correctly even if clients (like task-402-pay) do not send standard headers.
+app.use((req, res, next) => {
+  if (req.path === "/mcp") {
+    req.headers["accept"] = "application/json, text/event-stream";
+  }
+  next();
+});
+
 // Defaults to X Layer TESTNET per OKX docs — flip to mainnet once you've
 // verified an end-to-end paid call. Prices are USD strings and the SDK
 // auto-converts to the network's stablecoin, so no other changes needed
