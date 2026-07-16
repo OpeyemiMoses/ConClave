@@ -136,6 +136,8 @@ app.post("/mcp", async (req, res, next) => {
       mcpServer.close();
     });
     await mcpServer.connect(transport);
+    // Ensure the request headers satisfy StreamableHTTPServerTransport's requirement
+    req.headers["accept"] = "application/json, text/event-stream";
     await transport.handleRequest(req, res, req.body);
   } catch (err) {
     console.error(err);
