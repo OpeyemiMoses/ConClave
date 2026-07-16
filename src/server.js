@@ -88,7 +88,7 @@ if (process.env.OKX_API_KEY && PAY_TO) {
   );
 }
 
-app.get("/health", (_req, res) => res.json({ status: "ok" }));
+app.get("/health", (_req, res) => res.json({ status: "ok", updated: "accept-fix-v2" }));
 
 app.post("/analyze_repo", async (req, res) => {
   const { url, format } = req.body || {};
