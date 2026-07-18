@@ -81,6 +81,11 @@ if (process.env.OKX_API_KEY && PAY_TO) {
   // call tools/list for free before ever deciding to pay for a tools/call.
   mcpPaymentGate = paymentMiddleware(
     {
+      "GET /mcp": {
+        accepts: [{ scheme: "exact", network: NETWORK, payTo: PAY_TO, price: PRICE, extra: { decimals: 6 } }],
+        description: "ConClave MCP endpoint check",
+        mimeType: "application/json",
+      },
       "POST /mcp": {
         accepts: [{ scheme: "exact", network: NETWORK, payTo: PAY_TO, price: PRICE, extra: { decimals: 6 } }],
         description: "ConClave MCP endpoint (analyze_repo / reanalyze_repo)",
@@ -171,7 +176,12 @@ app.post("/mcp", async (req, res, next) => {
 // Stateless mode doesn't support the GET (server->client stream) or DELETE
 // (session teardown) parts of the spec — there's no session to stream to or
 // tear down. Respond per spec so well-behaved clients don't hang on them.
-app.get("/mcp", (_req, res) => {
+app.get("/mcp", (req, res, next) => {
+  if (mcpPaymentGate) {
+    return mcpPaymentGate(req, res, next);
+  }
+  next();
+}, (_req, res) => {
   res.status(405).json({
     jsonrpc: "2.0",
     error: { code: -32000, message: "Method not allowed — this MCP server is stateless (no SSE stream)." },
