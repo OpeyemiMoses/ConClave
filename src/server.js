@@ -8,6 +8,7 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import { runPipeline } from "./pipeline.js";
 import { toMarkdown } from "./report.js";
 import { createMcpServer } from "./mcp.js";
+import { createJob, getJob, runJobInBackground } from "./jobs.js";
 
 const app = express();
 // Trust proxy is required to reconstruct the correct https:// protocol
@@ -103,39 +104,52 @@ if (process.env.OKX_API_KEY && PAY_TO) {
 
 app.get("/health", (_req, res) => res.json({ status: "ok", updated: "accept-fix-v2" }));
 
-app.post("/analyze_repo", async (req, res) => {
+// The pipeline runs 4 LLM agents (30-90s+, longer under provider rate
+// limiting) — too slow for a single synchronous request/response, and a
+// blocking wait past ~30s here is what caused paid calls to come back with
+// no response at all. Payment is still gated on this call (via the
+// paymentMiddleware above); the paid response is now a jobId to poll instead
+// of the final report, so the caller always gets *something* back fast.
+function startAnalysisJob(req, res) {
   const { url, format } = req.body || {};
   if (!url) return res.status(400).json({ error: "Missing 'url' in request body" });
-  try {
-    const result = await runPipeline(url);
-    if (format === "markdown") {
-      res.type("text/markdown").send(toMarkdown(result));
-    } else {
-      res.json(result);
-    }
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: err.message });
-  }
-});
+
+  const jobId = createJob({ format });
+  runJobInBackground(jobId, () => runPipeline(url));
+
+  res.status(202).json({
+    jobId,
+    status: "processing",
+    pollUrl: `/jobs/${jobId}`,
+    message: "Analysis started. Poll pollUrl for the result (typically 30-90s)."
+  });
+}
+
+app.post("/analyze_repo", startAnalysisJob);
 
 // Same handler — pipeline.js auto-detects re-run via stored memory. Exposed
 // as a separate priced route per the build plan (cheaper: agents may be
 // skipped via the diff layer).
-app.post("/reanalyze_repo", async (req, res) => {
-  const { url, format } = req.body || {};
-  if (!url) return res.status(400).json({ error: "Missing 'url' in request body" });
-  try {
-    const result = await runPipeline(url);
-    if (format === "markdown") {
-      res.type("text/markdown").send(toMarkdown(result));
-    } else {
-      res.json(result);
-    }
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: err.message });
+app.post("/reanalyze_repo", startAnalysisJob);
+
+// Polling endpoint — not payment-gated (payment already happened on the
+// analyze_repo/reanalyze_repo call that created this job).
+app.get("/jobs/:jobId", (req, res) => {
+  const job = getJob(req.params.jobId);
+  if (!job) return res.status(404).json({ error: "Unknown jobId" });
+
+  if (job.status === "processing") {
+    return res.json({ jobId: job.id, status: "processing" });
   }
+  if (job.status === "failed") {
+    return res.status(200).json({ jobId: job.id, status: "failed", error: job.error });
+  }
+
+  // done
+  if (job.format === "markdown") {
+    return res.type("text/markdown").send(toMarkdown(job.result));
+  }
+  return res.json({ jobId: job.id, status: "done", result: job.result });
 });
 
 // Streamable HTTP MCP endpoint — this is what OKX A2MCP registration points
@@ -143,9 +157,14 @@ app.post("/reanalyze_repo", async (req, res) => {
 // state is kept between calls, which fits per-call billing (each request is
 // fully independent, nothing to resume). A fresh server+transport pair per
 // request avoids request-id collisions across concurrent callers.
+// Only analyze_repo/reanalyze_repo are paid — check_job_status is how the
+// caller retrieves a result they already paid for, so it must stay free
+// (otherwise polling for a paid job's result would itself cost another 0.5).
+const PAID_TOOLS = new Set(["analyze_repo", "reanalyze_repo"]);
+
 app.post("/mcp", async (req, res, next) => {
-  const isToolCall = req.body?.method === "tools/call";
-  if (isToolCall && mcpPaymentGate) {
+  const isPaidToolCall = req.body?.method === "tools/call" && PAID_TOOLS.has(req.body?.params?.name);
+  if (isPaidToolCall && mcpPaymentGate) {
     return mcpPaymentGate(req, res, next);
   }
   next();
